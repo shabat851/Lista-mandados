@@ -1,0 +1,11 @@
+{
+  "name": "Lista de mandados",
+  "short_name": "Mandados",
+  "description": "Lista compartida que también funciona sin conexión",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f7f3",
+  "theme_color": "#f7f7f3",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

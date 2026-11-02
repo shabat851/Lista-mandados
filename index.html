@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f7f3">
+  <meta name="description" content="Lista de mandados compartida, también disponible sin conexión.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <title>Lista de mandados</title>
+  <style>
+    :root { color-scheme:light; --ink:#20231f; --muted:#777d75; --line:#e8e9e3; --paper:#fff; --bg:#f7f7f3; --green:#276b49; --green-soft:#e8f3eb; }
+    * { box-sizing:border-box }
+    body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    main { max-width:560px; min-height:100dvh; margin:auto; padding:calc(24px + env(safe-area-inset-top)) 20px calc(28px + env(safe-area-inset-bottom)); }
+    header { display:flex; align-items:center; justify-content:space-between; margin:4px 0 22px; }
+    .brand { display:flex; align-items:center; gap:11px; }.logo { display:grid; place-items:center; width:42px;height:42px;border-radius:14px;background:var(--green-soft);color:var(--green);font-size:22px }
+    h1 { margin:0;font-size:22px;letter-spacing:-.5px }.subtitle { color:var(--muted);font-size:13px;margin-top:2px }
+    .refresh { border:0;background:transparent;padding:10px;border-radius:12px;color:var(--muted);font-size:20px;cursor:pointer }
+    .connection { display:flex;align-items:center;gap:7px;margin:-10px 2px 14px;color:var(--muted);font-size:12px }.dot {width:8px;height:8px;border-radius:50%;background:#a0a59d}.connection.online .dot{background:#48a36b}.connection.offline .dot{background:#d48a38}
+    form { display:flex;gap:9px;padding:8px;background:var(--paper);border:1px solid var(--line);border-radius:17px;box-shadow:0 4px 16px #252a1c08 }
+    input { flex:1;min-width:0;border:0;outline:0;padding:9px 8px;background:transparent;color:var(--ink);font:inherit }input::placeholder{color:#a1a59e}
+    .add { border:0;border-radius:12px;background:var(--green);color:#fff;padding:0 17px;font:600 15px system-ui;cursor:pointer }
+    .filters { display:flex;gap:8px;margin:22px 0 14px }.filter {border:1px solid var(--line);background:transparent;color:#60665e;border-radius:999px;padding:8px 14px;font:500 14px system-ui;cursor:pointer}.filter.active{color:var(--green);border-color:#b7d4c0;background:var(--green-soft)}
+    .section-head {display:flex;justify-content:space-between;align-items:center;margin:0 2px 9px;color:var(--muted);font-size:13px}.list {list-style:none;margin:0;padding:0;background:var(--paper);border:1px solid var(--line);border-radius:17px;overflow:hidden}
+    .item {display:flex;align-items:center;gap:12px;min-height:60px;padding:11px 15px;border-bottom:1px solid var(--line)}.item:last-child{border-bottom:0}.check{width:25px;height:25px;flex:0 0 25px;display:grid;place-items:center;border:1.5px solid #c8ccc4;border-radius:9px;color:white;background:white;cursor:pointer;font-size:15px}.item.done .check{background:var(--green);border-color:var(--green)}.name{flex:1;overflow-wrap:anywhere}.item.done .name{color:#999e96;text-decoration:line-through}.status{color:#81877f;font-size:12px}
+    .empty{padding:34px 18px;text-align:center;color:var(--muted);background:var(--paper);border:1px solid var(--line);border-radius:17px}.empty-icon{font-size:28px;margin-bottom:8px}.notice{min-height:20px;padding:9px 2px 0;color:#a14437;font-size:13px}.toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#26352b;color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;box-shadow:0 4px 18px #0002;white-space:nowrap}
+    @media(max-width:380px){main{padding-left:14px;padding-right:14px}h1{font-size:20px}}
+  </style>
+  <script src="config.js"></script>
+</head>
+<body>
+<main>
+  <header><div class="brand"><div class="logo" aria-hidden="true">✓</div><div><h1>Lista de mandados</h1><div class="subtitle">Compartida y al día</div></div></div><button class="refresh" type="button" aria-label="Sincronizar" title="Sincronizar" onclick="syncNow()">↻</button></header>
+  <div class="connection" id="connection"><span class="dot"></span><span id="connection-text">Conectando…</span></div>
+  <form id="add-form"><input id="item-name" type="text" maxlength="100" autocomplete="off" placeholder="¿Qué hace falta?" aria-label="Nombre del artículo"><button class="add" type="submit">Agregar</button></form>
+  <nav class="filters" aria-label="Filtrar lista"><button class="filter active" data-filter="Todos" type="button">Todos</button><button class="filter" data-filter="Pendiente" type="button">Pendientes</button><button class="filter" data-filter="Comprado" type="button">Comprados</button></nav>
+  <div class="section-head"><span id="list-label">Artículos</span><span id="count"></span></div><div id="content"></div><div id="notice" class="notice" role="status"></div>
+</main>
+<script>
+  const STORE_KEY='mandados.items.v1', QUEUE_KEY='mandados.queue.v1';
+  let items=readStore(STORE_KEY,[]), queue=readStore(QUEUE_KEY,[]), activeFilter='Todos', busy=false;
+  const content=document.getElementById('content'), notice=document.getElementById('notice');
+  function readStore(key,fallback){try{return JSON.parse(localStorage.getItem(key))||fallback}catch(_){return fallback}}
+  function save(){localStorage.setItem(STORE_KEY,JSON.stringify(items));localStorage.setItem(QUEUE_KEY,JSON.stringify(queue));}
+  function configured(){return window.APP_CONFIG && /^https:\/\//.test(window.APP_CONFIG.apiUrl) && !window.APP_CONFIG.apiUrl.includes('PEGA_AQUI')}
+  function setConnection(){const el=document.getElementById('connection');const online=navigator.onLine;el.className='connection '+(online?'online':'offline');document.getElementById('connection-text').textContent=!online?'Sin conexión · cambios guardados en este celular':(queue.length?'Con internet · cambios por sincronizar':'Con internet · lista sincronizada')}
+  function render(){const shown=activeFilter==='Todos'?items:items.filter(x=>x.status===activeFilter), pending=items.filter(x=>x.status==='Pendiente').length;document.getElementById('count').textContent=activeFilter==='Todos'?`${items.length} en total · ${pending} pendientes`:`${shown.length}`;document.getElementById('list-label').textContent=activeFilter==='Todos'?'Artículos':activeFilter==='Pendiente'?'Por comprar':'Ya comprados';
+    if(!shown.length){const text=items.length?'No hay artículos en esta vista.':'Todavía no hay artículos. Agrega lo que hace falta.';content.innerHTML=`<div class="empty"><div class="empty-icon">🛒</div>${text}</div>`;return}
+    const ul=document.createElement('ul');ul.className='list';shown.forEach(item=>{const li=document.createElement('li');li.className='item'+(item.status==='Comprado'?' done':'');const b=document.createElement('button');b.className='check';b.type='button';b.setAttribute('aria-label',item.status==='Comprado'?'Marcar pendiente':'Marcar comprado');b.textContent=item.status==='Comprado'?'✓':'';b.onclick=()=>toggle(item);const n=document.createElement('span');n.className='name';n.textContent=item.name;const s=document.createElement('span');s.className='status';s.textContent=item.status;li.append(b,n,s);ul.appendChild(li)});content.replaceChildren(ul);
+  }
+  function api(params){return new Promise((resolve,reject)=>{if(!configured())return reject(new Error('Falta configurar la dirección del servidor.'));const cb='mandadosCb_'+Date.now()+'_'+Math.random().toString(36).slice(2);const script=document.createElement('script');const timer=setTimeout(()=>finish(new Error('La sincronización tardó demasiado.')),12000);function finish(err,data){clearTimeout(timer);delete window[cb];script.remove();err?reject(err):data&&data.ok?resolve(data):reject(new Error(data?.error||'No se pudo sincronizar.'))}window[cb]=data=>finish(null,data);script.onerror=()=>finish(new Error('No se pudo conectar con la lista compartida.'));const q=new URLSearchParams({...params,callback:cb});script.src=window.APP_CONFIG.apiUrl+'?'+q.toString();document.body.appendChild(script)})}
+  function toast(text){const old=document.querySelector('.toast');if(old)old.remove();const el=document.createElement('div');el.className='toast';el.textContent=text;document.body.appendChild(el);setTimeout(()=>el.remove(),2300)}
+  async function syncNow(){if(busy||!navigator.onLine)return;if(!configured()){setConnection();notice.textContent='Configura la URL de Apps Script en config.js para compartir y sincronizar.';return}busy=true;notice.textContent='';setConnection();try{while(queue.length){const op=queue[0];if(op.type==='add')await api({action:'add',id:op.id,name:op.name});else await api({action:'status',id:op.id,status:op.status});queue.shift();save();setConnection()}const data=await api({action:'list'});const localPending=new Set(queue.map(op=>op.id));const server=data.items||[];const merged=new Map(server.map(x=>[x.id,x]));items.filter(x=>localPending.has(x.id)).forEach(x=>merged.set(x.id,x));items=Array.from(merged.values());save();render()}catch(err){notice.textContent=err.message||'Sincronización pendiente.'}finally{busy=false;setConnection()}}
+  function toggle(item){item.status=item.status==='Comprado'?'Pendiente':'Comprado';queue.push({type:'status',id:item.id,status:item.status});save();render();setConnection();syncNow()}
+  document.getElementById('add-form').addEventListener('submit',e=>{e.preventDefault();const input=document.getElementById('item-name'),name=input.value.trim();if(!name){input.focus();return}const item={id:crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2),name,status:'Pendiente'};items.unshift(item);queue.push({type:'add',id:item.id,name:item.name});save();input.value='';if(activeFilter==='Comprado'){activeFilter='Todos';syncFilters()}render();setConnection();if(!navigator.onLine)toast('Guardado en este celular');else syncNow();input.focus()});
+  function syncFilters(){document.querySelectorAll('.filter').forEach(b=>b.classList.toggle('active',b.dataset.filter===activeFilter))}
+  document.querySelectorAll('.filter').forEach(b=>b.addEventListener('click',()=>{activeFilter=b.dataset.filter;syncFilters();render()}));
+  window.addEventListener('online',syncNow);window.addEventListener('offline',setConnection);if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+  render();setConnection();if(navigator.onLine)syncNow();
+</script>
+</body></html>
